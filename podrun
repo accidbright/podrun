@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+
+# Assume default values
+# By default install pods from remote
+LOCAL=0
+
+# By default don't delete Pods folder and Podfile.lock
+DELETE=0 
+
+# By default do pod install with verbose flag and tell it to grab latest specs from the podspec repo (otherwise we can end up with different states on 
+# different people's machines)
+COMMAND="pod install --verbose"
+
+# By default do not tell cocoapods to grab latest specs from the podspec repo (otherwise we can end up with different states on different people's machines)
+# Designed as separate operation and disabled by default because it is rather long operation and cocoapods itself remove this command from 'pod install' by default
+REPO_UPDATE=0
+
+# By default do not show help message
+SHOW_HELP=0
+
+# Parse parameters 
+while [[ $# > 0 ]]
+do
+key="$1"
+
+case $key in
+    -r|--remove)
+    DELETE=1
+    ;;
+    -l|--local)
+    LOCAL=1
+    ;;
+    -c|--command)
+    COMMAND="$2"
+    shift # past argument
+    ;;
+    -u|--update)
+    REPO_UPDATE=1
+    ;;
+    -h|--help)
+    SHOW_HELP=1
+    ;;
+    *)
+    # unknown option
+    ;;
+esac
+shift # past argument or value
+done
+
+if [ $SHOW_HELP != 0 ] ; then
+	echo "podrun script designed as a solution to implement easy installation of pods choosing source from remote or local path."
+    echo
+    echo "podrun script can run pre- and post-run scripts. To run pre-run script create 'pre-run.sh' file at the same directory as podrun script. \ 
+To run post-run script create 'post-run.sh' file at the same directory as podrun script. No parameters can be passed to them. \
+To pass parameters you can run another script from 'pre-run.sh' and 'post-run.sh' with parameters, described in them."
+    echo
+    echo "Usage:"
+    echo "podrun [-c cocoapods_command|-l|-r|-d|-u|-h]"
+    echo
+    echo "-с (--command) Specifies command to be evaluated by Cocoapods. If omitted, 'pod install --verbose' command runs by the default."
+    echo
+    echo "-l (--local) Makes Cocoapods to install pods from local paths. This is done by installing DC_INSTALL_LOCALLY environment variable to 'true' value.\
+ To achieve using this check in podfile value of its variable. If omitted, DC_INSTALL_LOCALLY will be set to 'false' value. This means, that pods will be installed from the remote."
+    echo
+    echo "-r (--remove) Deletes Podfile.lock file and Pods folder from the current path. By default these files won't be deleted (if flag is omitted)."
+    echo
+    echo "-u (--update) Makes cocoapods to update specs repos before installing pods (this operation may be rather long)."
+    echo
+    echo "-h (--help) Shows help (this message)."
+    exit 0
+fi
+
+# Print out parameters for debug case
+echo DELETE  = "${DELETE}"
+echo LOCAL   = "${LOCAL}"
+echo COMMAND = "${COMMAND}"
+echo REPO_UPDATE = "${REPO_UPDATE}"
+
+# Check if we have Podfile in our working folder 
+# (a kind of protection, that we won't remove unexpected Pods folder)
+# If we are in the wrong folder, we'll get error later from Cocoapods nevertheless
+# this is preventive
+PODFILE="Podfile"
+if [ -f "$PODFILE" ] ; then
+	echo "$PODFILE found."
+else
+	echo "$PODFILE not found. It seems, that you're in a wrong directory. Aborting..."
+	exit 1
+fi
+
+# Set temporary environment variable that allows us to choose podfile variant
+if [ $LOCAL != 0 ] ; then
+	export DC_INSTALL_LOCALLY=true
+else
+	export DC_INSTALL_LOCALLY=false
+fi
+
+# Delete Pods folder and Podfile.lock file, if necessary
+if [ $DELETE != 0 ] ; then
+	rm -rf Pods
+	rm -f Podfile.lock
+fi
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Run pre-run.sh script
+echo "Start pre-run script"
+pushd $DIR
+sh pre-run.sh
+popd
+
+# Run update of repos to grab latest specs from the podspec repo (otherwise we can end up with different states on 
+# different people's machines)
+if [ $REPO_UPDATE != 0 ] ; then
+	pod repo update
+fi
+
+# Run command
+${COMMAND}
+if [ $? -ne 0 ]; then
+	exit 1
+fi
+
+# Run post-run.sh script
+echo "Start post-run script"
+pushd $DIR
+sh post-run.sh
+popd
+
+# Unset temporary environment variable that allows us to choose podfile variant
+unset DC_INSTALL_LOCALLY
