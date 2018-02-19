@@ -13,12 +13,12 @@ Easy to use solution for selecting pod source installation: from remote repo or 
   # Local pods
 	  puts "Using local pods"
 	  pod "SomePod", :path => "#{ENV['SOME_REPOSITORY_PATH']}/Pods/SomePod"
-    # List all pods with paths here
+          # List all pods with paths here
   else
   # Remote pods
 	  puts "Using remote pods"
 	  pod 'SomePod'
-    # List all pods here
+          # List all pods here
   end
   ```
 **NOTE:** 
